@@ -1,0 +1,12 @@
+oauthClient:
+  redirectUris:
+    - http://localhost:8080/authorization-code/callback
+  applicationType: web
+
+directions: |+2
+  Okta configuration written to: .okta.env
+  Don't EVER commit .okta.env into source control. Add it to the .gitignore file.
+
+  Run the application with:
+    go run main.go
+

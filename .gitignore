@@ -15,4 +15,6 @@
 # vendor/
 
 .env
+# Uncomment below line
+#.okta.env
 error.txt
