@@ -106,8 +106,6 @@ func ProfileHandler(c *gin.Context) {
 }
 
 func AuthCodeCallbackHandler(c *gin.Context) {
-	c.Header("Cache-Control", "no-cache") // See https://github.com/okta/samples-golang/issues/20
-
 	// Check the state that was returned in the query string is the same as the above state
 	if c.Query("state") != state {
 		c.AbortWithError(http.StatusForbidden, fmt.Errorf("The state was not as expected"))
