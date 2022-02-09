@@ -266,5 +266,5 @@ func verifyToken(t string) (*verifier.Jwt, error) {
 		return result, nil
 	}
 
-	return nil, fmt.Errorf("token could not be verified: %s", "")
+	return nil, fmt.Errorf("token could not be verified")
 }
