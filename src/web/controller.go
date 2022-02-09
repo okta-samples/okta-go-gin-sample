@@ -56,7 +56,7 @@ func LoginHandler(c *gin.Context) {
 	nonce = base64.URLEncoding.EncodeToString(randstr.Bytes(32))
 
 	q := url.Values{}
-	q.Add("client_id", os.Getenv("CLIENT_ID"))
+	q.Add("client_id", os.Getenv("OKTA_OAUTH2_CLIENT_ID"))
 	q.Add("response_type", "code")
 	q.Add("response_mode", "query")
 	q.Add("scope", "openid profile email")
@@ -64,7 +64,7 @@ func LoginHandler(c *gin.Context) {
 	q.Add("state", state)
 	q.Add("nonce", nonce)
 
-	location := url.URL{Path: os.Getenv("ISSUER") + "/v1/authorize", RawQuery: q.Encode()}
+	location := url.URL{Path: os.Getenv("OKTA_OAUTH2_ISSUER") + "/v1/authorize", RawQuery: q.Encode()}
 	c.Redirect(http.StatusFound, location.RequestURI())
 }
 
@@ -169,7 +169,7 @@ func getProfileData(r *http.Request) (map[string]string, error) {
 		return m, nil
 	}
 
-	reqUrl := os.Getenv("ISSUER") + "/v1/userinfo"
+	reqUrl := os.Getenv("OKTA_OAUTH2_ISSUER") + "/v1/userinfo"
 
 	req, err := http.NewRequest("GET", reqUrl, bytes.NewReader([]byte("")))
 	if err != nil {
@@ -209,14 +209,14 @@ type Exchange struct {
 
 func exchangeCode(code string) (Exchange, error) {
 	authHeader := base64.StdEncoding.EncodeToString(
-		[]byte(os.Getenv("CLIENT_ID") + ":" + os.Getenv("CLIENT_SECRET")))
+		[]byte(os.Getenv("OKTA_OAUTH2_CLIENT_ID") + ":" + os.Getenv("OKTA_OAUTH2_CLIENT_SECRET")))
 
 	q := url.Values{}
 	q.Add("grant_type", "authorization_code")
 	q.Set("code", code)
 	q.Add("redirect_uri", "http://localhost:8080/authorization-code/callback")
 
-	url := os.Getenv("ISSUER") + "/v1/token?" + q.Encode()
+	url := os.Getenv("OKTA_OAUTH2_ISSUER") + "/v1/token?" + q.Encode()
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader([]byte("")))
 	if err != nil {
@@ -251,9 +251,9 @@ func exchangeCode(code string) (Exchange, error) {
 func verifyToken(t string) (*verifier.Jwt, error) {
 	tv := map[string]string{}
 	tv["nonce"] = nonce
-	tv["aud"] = os.Getenv("CLIENT_ID")
+	tv["aud"] = os.Getenv("OKTA_OAUTH2_CLIENT_ID")
 	jv := verifier.JwtVerifier{
-		Issuer:           os.Getenv("ISSUER"),
+		Issuer:           os.Getenv("OKTA_OAUTH2_ISSUER"),
 		ClaimsToValidate: tv,
 	}
 
