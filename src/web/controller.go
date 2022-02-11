@@ -47,7 +47,6 @@ func IndexHandler(c *gin.Context) {
 			"Error":           errorMsg,
 		},
 	)
-
 }
 
 func LoginHandler(c *gin.Context) {
@@ -94,7 +93,7 @@ func ProfileHandler(c *gin.Context) {
 	c.HTML(
 		// Set the HTTP status to 200 (OK)
 		http.StatusOK,
-		// Use the index.gohtml template
+		// Use the profile.gohtml template
 		"profile.gohtml",
 		// Pass the data that the page uses
 		gin.H{
@@ -103,59 +102,6 @@ func ProfileHandler(c *gin.Context) {
 			"Error":           errorMsg,
 		},
 	)
-}
-
-func AuthCodeCallbackHandler(c *gin.Context) {
-	// Check the state that was returned in the query string is the same as the above state
-	if c.Query("state") != state {
-		c.AbortWithError(http.StatusForbidden, fmt.Errorf("The state was not as expected"))
-		return
-	}
-	// Make sure the code was provided
-	if c.Query("code") == "" {
-		c.AbortWithError(http.StatusForbidden, fmt.Errorf("The code was not returned or is not accessible"))
-		return
-	}
-
-	exchange, err := exchangeCode(c.Query("code"))
-	if err != nil {
-		c.AbortWithError(http.StatusUnauthorized, err)
-		return
-	}
-	if exchange.Error != "" {
-		c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("%s:%s", exchange.Error, exchange.ErrorDescription))
-		return
-	}
-
-	session, err := sessionStore.Get(c.Request, "okta-hosted-login-session-store")
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	_, err = verifyToken(exchange.IdToken)
-
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	} else {
-		session.Values["id_token"] = exchange.IdToken
-		session.Values["access_token"] = exchange.AccessToken
-
-		session.Save(c.Request, c.Writer)
-	}
-
-	c.Redirect(http.StatusFound, "/")
-}
-
-func isAuthenticated(r *http.Request) bool {
-	session, err := sessionStore.Get(r, "okta-hosted-login-session-store")
-
-	if err != nil || session.Values["id_token"] == nil || session.Values["id_token"] == "" {
-		return false
-	}
-
-	return true
 }
 
 func getProfileData(r *http.Request) (map[string]string, error) {
@@ -193,6 +139,49 @@ func getProfileData(r *http.Request) (map[string]string, error) {
 	json.Unmarshal(body, &m)
 
 	return m, nil
+}
+
+func AuthCodeCallbackHandler(c *gin.Context) {
+	// Check the state that was returned in the query string is the same as the above state
+	if c.Query("state") != state {
+		c.AbortWithError(http.StatusForbidden, fmt.Errorf("The state was not as expected"))
+		return
+	}
+	// Make sure the code was provided
+	if c.Query("code") == "" {
+		c.AbortWithError(http.StatusForbidden, fmt.Errorf("The code was not returned or is not accessible"))
+		return
+	}
+
+	exchange, err := exchangeCode(c.Query("code"))
+	if err != nil {
+		c.AbortWithError(http.StatusUnauthorized, err)
+		return
+	}
+	if exchange.Error != "" {
+		c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("%s:%s", exchange.Error, exchange.ErrorDescription))
+		return
+	}
+
+	session, err := sessionStore.Get(c.Request, "okta-hosted-login-session-store")
+	if err != nil {
+		c.AbortWithError(http.StatusForbidden, err)
+		return
+	}
+
+	_, err = verifyToken(exchange.IdToken)
+
+	if err != nil {
+		c.AbortWithError(http.StatusForbidden, err)
+		return
+	} else {
+		session.Values["id_token"] = exchange.IdToken
+		session.Values["access_token"] = exchange.AccessToken
+
+		session.Save(c.Request, c.Writer)
+	}
+
+	c.Redirect(http.StatusFound, "/")
 }
 
 type Exchange struct {

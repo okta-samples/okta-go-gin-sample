@@ -21,19 +21,22 @@ func Init() {
 
 	// Set the router as the default one shipped with Gin
 	router := gin.Default()
+
 	// Serve HTML templates
 	router.LoadHTMLGlob("./templates/*")
 	// Serve frontend static files
 	router.Use(static.Serve("/static", static.LocalFile("./static", true)))
 
-	// setup client side routes
+	// setup public routes
 	router.GET("/", IndexHandler)
-	router.GET("/profile", ProfileHandler)
-
-	// setup API routes
 	router.GET("/login", LoginHandler)
 	router.GET("/authorization-code/callback", AuthCodeCallbackHandler)
-	router.POST("/logout", LogoutHandler)
+
+	// setup private routes
+	authorized := router.Group("/", AuthMiddleware())
+
+	authorized.POST("/logout", LogoutHandler)
+	authorized.GET("/profile", ProfileHandler)
 
 	// Start and run the server
 	log.Printf("Running on http://localhost:" + port)
