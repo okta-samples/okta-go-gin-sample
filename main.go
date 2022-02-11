@@ -1,8 +1,8 @@
 package main
 
-import "okta-go-gin-sample/src/web"
+import "okta-go-gin-sample/server"
 
 func main() {
 	// Init web app
-	web.Init()
+	server.Init()
 }
