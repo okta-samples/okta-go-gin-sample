@@ -21,11 +21,12 @@ func isAuthenticated(r *http.Request) bool {
 	toValidate := map[string]string{}
 	toValidate["aud"] = "api://default"
 	toValidate["cid"] = os.Getenv("OKTA_OAUTH2_CLIENT_ID")
-	jwtVerifierSetup := jwtverifier.JwtVerifier{
+
+	verifier := jwtverifier.JwtVerifier{
 		Issuer:           os.Getenv("OKTA_OAUTH2_ISSUER"),
 		ClaimsToValidate: toValidate,
 	}
-	_, err = jwtVerifierSetup.New().VerifyAccessToken(bearerToken)
+	_, err = verifier.New().VerifyAccessToken(bearerToken)
 
 	if err != nil {
 		log.Printf("Validation failed: %s", err.Error())
