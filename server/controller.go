@@ -1,27 +1,24 @@
 package server
 
 import (
-	"bytes"
+	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/sessions"
 	verifier "github.com/okta/okta-jwt-verifier-golang"
 	"github.com/thanhpk/randstr"
+	"golang.org/x/oauth2"
 )
 
-var (
-	sessionStore = sessions.NewCookieStore([]byte("okta-hosted-login-session-store"))
-	state        = randstr.Hex(16)
-	nonce        = "NonceNotSetYet"
-)
+var sessionStore = sessions.NewCookieStore([]byte("okta-hosted-login-session-store"))
 
 // IndexHandler serves the index.html page
 func IndexHandler(c *gin.Context) {
@@ -52,19 +49,31 @@ func IndexHandler(c *gin.Context) {
 func LoginHandler(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache") // See https://github.com/okta/samples-golang/issues/20
 
-	nonce = base64.URLEncoding.EncodeToString(randstr.Bytes(32))
+	session, err := sessionStore.Get(c.Request, "okta-hosted-login-session-store")
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	// Generate a random state parameter for CSRF security
+	oauthState := randstr.Hex(16)
 
-	q := url.Values{}
-	q.Add("client_id", os.Getenv("OKTA_OAUTH2_CLIENT_ID"))
-	q.Add("response_type", "code")
-	q.Add("response_mode", "query")
-	q.Add("scope", "openid profile email")
-	q.Add("redirect_uri", "http://localhost:8080/authorization-code/callback")
-	q.Add("state", state)
-	q.Add("nonce", nonce)
+	// Create the PKCE code verifier and code challenge
+	oauthCodeVerifier := randstr.Hex(50)
+	// create sha256 hash of the code verifier
+	oauthCodeChallenge := generateOauthCodeChallenge(oauthCodeVerifier)
 
-	location := url.URL{Path: os.Getenv("OKTA_OAUTH2_ISSUER") + "/v1/authorize", RawQuery: q.Encode()}
-	c.Redirect(http.StatusFound, location.RequestURI())
+	session.Values["oauth_state"] = oauthState
+	session.Values["oauth_code_verifier"] = oauthCodeVerifier
+
+	session.Save(c.Request, c.Writer)
+
+	redirectURI := oktaOauthConfig.AuthCodeURL(
+		oauthState,
+		oauth2.SetAuthURLParam("code_challenge", oauthCodeChallenge),
+		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+	)
+
+	c.Redirect(http.StatusFound, redirectURI)
 }
 
 func LogoutHandler(c *gin.Context) {
@@ -74,7 +83,6 @@ func LogoutHandler(c *gin.Context) {
 		return
 	}
 
-	delete(session.Values, "id_token")
 	delete(session.Values, "access_token")
 
 	session.Save(c.Request, c.Writer)
@@ -115,7 +123,7 @@ func getProfileData(r *http.Request) (map[string]string, error) {
 
 	reqUrl := os.Getenv("OKTA_OAUTH2_ISSUER") + "/v1/userinfo"
 
-	req, err := http.NewRequest("GET", reqUrl, bytes.NewReader([]byte("")))
+	req, err := http.NewRequest("GET", reqUrl, nil)
 	if err != nil {
 		return m, err
 	}
@@ -142,41 +150,53 @@ func getProfileData(r *http.Request) (map[string]string, error) {
 }
 
 func AuthCodeCallbackHandler(c *gin.Context) {
-	// Check the state that was returned in the query string is the same as the above state
-	if c.Query("state") != state {
-		c.AbortWithError(http.StatusForbidden, fmt.Errorf("The state was not as expected"))
-		return
-	}
-	// Make sure the code was provided
-	if c.Query("code") == "" {
-		c.AbortWithError(http.StatusForbidden, fmt.Errorf("The code was not returned or is not accessible"))
-		return
-	}
-
-	exchange, err := exchangeCode(c.Query("code"))
-	if err != nil {
-		c.AbortWithError(http.StatusUnauthorized, err)
-		return
-	}
-	if exchange.Error != "" {
-		c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("%s:%s", exchange.Error, exchange.ErrorDescription))
-		return
-	}
-
 	session, err := sessionStore.Get(c.Request, "okta-hosted-login-session-store")
 	if err != nil {
 		c.AbortWithError(http.StatusForbidden, err)
 		return
 	}
 
-	_, err = verifyToken(exchange.IdToken)
+	// Check the state that was returned in the query string is the same as the above state
+	if c.Query("state") == "" || c.Query("state") != session.Values["oauth_state"] {
+		c.AbortWithError(http.StatusForbidden, fmt.Errorf("The state was not as expected"))
+		return
+	}
+
+	// Make sure the code was provided
+	if c.Query("error") != "" {
+		c.AbortWithError(http.StatusForbidden, fmt.Errorf("Authorization server returned an error: %s", c.Query("error")))
+		return
+	}
+
+	// Make sure the code was provided
+	if c.Query("code") == "" {
+		c.AbortWithError(http.StatusForbidden, fmt.Errorf("The code was not returned or is not accessible"))
+		return
+	}
+
+	token, err := oktaOauthConfig.Exchange(
+		context.Background(),
+		c.Query("code"),
+		oauth2.SetAuthURLParam("code_verifier", session.Values["oauth_code_verifier"].(string)),
+	)
+	if err != nil {
+		c.AbortWithError(http.StatusUnauthorized, err)
+		return
+	}
+
+	// Extract the ID Token from OAuth2 token.
+	rawIDToken, ok := token.Extra("id_token").(string)
+	if !ok {
+		c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("Id token missing from OAuth2 token"))
+		return
+	}
+	_, err = verifyToken(rawIDToken)
 
 	if err != nil {
 		c.AbortWithError(http.StatusForbidden, err)
 		return
 	} else {
-		session.Values["id_token"] = exchange.IdToken
-		session.Values["access_token"] = exchange.AccessToken
+		session.Values["access_token"] = token.AccessToken
 
 		session.Save(c.Request, c.Writer)
 	}
@@ -184,60 +204,14 @@ func AuthCodeCallbackHandler(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/")
 }
 
-type Exchange struct {
-	Error            string `json:"error,omitempty"`
-	ErrorDescription string `json:"error_description,omitempty"`
-	AccessToken      string `json:"access_token,omitempty"`
-	TokenType        string `json:"token_type,omitempty"`
-	ExpiresIn        int    `json:"expires_in,omitempty"`
-	Scope            string `json:"scope,omitempty"`
-	IdToken          string `json:"id_token,omitempty"`
-}
-
-func exchangeCode(code string) (Exchange, error) {
-	authHeader := base64.StdEncoding.EncodeToString(
-		[]byte(os.Getenv("OKTA_OAUTH2_CLIENT_ID") + ":" + os.Getenv("OKTA_OAUTH2_CLIENT_SECRET")))
-
-	q := url.Values{}
-	q.Add("grant_type", "authorization_code")
-	q.Set("code", code)
-	q.Add("redirect_uri", "http://localhost:8080/authorization-code/callback")
-
-	url := os.Getenv("OKTA_OAUTH2_ISSUER") + "/v1/token?" + q.Encode()
-
-	req, err := http.NewRequest("POST", url, bytes.NewReader([]byte("")))
-	if err != nil {
-		return Exchange{}, err
-	}
-
-	h := req.Header
-	h.Add("Authorization", "Basic "+authHeader)
-	h.Add("Accept", "application/json")
-	h.Add("Content-Type", "application/x-www-form-urlencoded")
-	h.Add("Connection", "close")
-	h.Add("Content-Length", "0")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return Exchange{}, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return Exchange{}, err
-	}
-
-	var exchange Exchange
-	json.Unmarshal(body, &exchange)
-
-	return exchange, nil
+func generateOauthCodeChallenge(oauthCodeVerifier string) string {
+	h := sha256.New()
+	h.Write([]byte(oauthCodeVerifier))
+	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
 
 func verifyToken(t string) (*verifier.Jwt, error) {
 	tv := map[string]string{}
-	tv["nonce"] = nonce
 	tv["aud"] = os.Getenv("OKTA_OAUTH2_CLIENT_ID")
 	jv := verifier.JwtVerifier{
 		Issuer:           os.Getenv("OKTA_OAUTH2_ISSUER"),

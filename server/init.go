@@ -7,11 +7,26 @@ import (
 	"github.com/gin-gonic/contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"golang.org/x/oauth2"
 )
+
+var oktaOauthConfig = &oauth2.Config{}
 
 func Init() {
 
-	godotenv.Load("./.okta.env")
+	godotenv.Load("./.env")
+
+	oktaOauthConfig = &oauth2.Config{
+		RedirectURL:  "http://localhost:8080/authorization-code/callback",
+		ClientID:     os.Getenv("OKTA_OAUTH2_CLIENT_ID"),
+		ClientSecret: os.Getenv("OKTA_OAUTH2_CLIENT_SECRET"),
+		Scopes:       []string{"openid", "profile", "email"},
+		Endpoint: oauth2.Endpoint{
+			AuthURL:   os.Getenv("OKTA_OAUTH2_ISSUER") + "/v1/authorize",
+			TokenURL:  os.Getenv("OKTA_OAUTH2_ISSUER") + "/v1/token",
+			AuthStyle: oauth2.AuthStyleInParams,
+		},
+	}
 
 	port := os.Getenv("PORT")
 
