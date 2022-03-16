@@ -14,7 +14,7 @@ var oktaOauthConfig = &oauth2.Config{}
 
 func Init() {
 
-	godotenv.Load("./.env")
+	godotenv.Load("./.okta.env")
 
 	oktaOauthConfig = &oauth2.Config{
 		RedirectURL:  "http://localhost:8080/authorization-code/callback",
