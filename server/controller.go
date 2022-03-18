@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/sessions"
 	verifier "github.com/okta/okta-jwt-verifier-golang"
+	oauthUtils "github.com/okta/okta-jwt-verifier-golang/utils"
 	"github.com/thanhpk/randstr"
 	"golang.org/x/oauth2"
 )
@@ -58,12 +57,16 @@ func LoginHandler(c *gin.Context) {
 	oauthState := randstr.Hex(16)
 
 	// Create the PKCE code verifier and code challenge
-	oauthCodeVerifier := randstr.Hex(50)
-	// create sha256 hash of the code verifier
-	oauthCodeChallenge := generateOauthCodeChallenge(oauthCodeVerifier)
+	oauthCodeVerifier, err := oauthUtils.GenerateCodeVerifierWithLength(50)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	// get sha256 hash of the code verifier
+	oauthCodeChallenge := oauthCodeVerifier.CodeChallengeS256()
 
 	session.Values["oauth_state"] = oauthState
-	session.Values["oauth_code_verifier"] = oauthCodeVerifier
+	session.Values["oauth_code_verifier"] = oauthCodeVerifier.String()
 
 	session.Save(c.Request, c.Writer)
 
@@ -79,7 +82,7 @@ func LoginHandler(c *gin.Context) {
 func LogoutHandler(c *gin.Context) {
 	session, err := sessionStore.Get(c.Request, "okta-hosted-login-session-store")
 	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("The state was not as expected"))
+		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("the state was not as expected"))
 		return
 	}
 
@@ -158,19 +161,19 @@ func AuthCodeCallbackHandler(c *gin.Context) {
 
 	// Check the state that was returned in the query string is the same as the above state
 	if c.Query("state") == "" || c.Query("state") != session.Values["oauth_state"] {
-		c.AbortWithError(http.StatusForbidden, fmt.Errorf("The state was not as expected"))
+		c.AbortWithError(http.StatusForbidden, fmt.Errorf("the state was not as expected"))
 		return
 	}
 
 	// Make sure the code was provided
 	if c.Query("error") != "" {
-		c.AbortWithError(http.StatusForbidden, fmt.Errorf("Authorization server returned an error: %s", c.Query("error")))
+		c.AbortWithError(http.StatusForbidden, fmt.Errorf("authorization server returned an error: %s", c.Query("error")))
 		return
 	}
 
 	// Make sure the code was provided
 	if c.Query("code") == "" {
-		c.AbortWithError(http.StatusForbidden, fmt.Errorf("The code was not returned or is not accessible"))
+		c.AbortWithError(http.StatusForbidden, fmt.Errorf("the code was not returned or is not accessible"))
 		return
 	}
 
@@ -187,7 +190,7 @@ func AuthCodeCallbackHandler(c *gin.Context) {
 	// Extract the ID Token from OAuth2 token.
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok {
-		c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("Id token missing from OAuth2 token"))
+		c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("id token missing from OAuth2 token"))
 		return
 	}
 	_, err = verifyToken(rawIDToken)
@@ -202,12 +205,6 @@ func AuthCodeCallbackHandler(c *gin.Context) {
 	}
 
 	c.Redirect(http.StatusFound, "/")
-}
-
-func generateOauthCodeChallenge(oauthCodeVerifier string) string {
-	h := sha256.New()
-	h.Write([]byte(oauthCodeVerifier))
-	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
 
 func verifyToken(t string) (*verifier.Jwt, error) {
