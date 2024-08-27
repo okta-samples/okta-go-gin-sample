@@ -26,6 +26,10 @@ Follow the instructions printed to the console.
 
 > **Note**: Don't EVER commit `.okta.env` into source control. Add it to the `.gitignore` file.
 
+## Enable Refresh Token
+
+Sign into your [Okta Developer Edition account](https://developer.okta.com/login/) to add a required setting to your Go Okta app to avoid third-party cookies. Navigate to **Applications** > **Applications** and select "okta-go-gin-sample" application to edit. Find the **General Settings** and press **Edit**. Enable **Refresh Token** in the **Grant type** section. **Save** your changes.
+
 ## Run the Example
 
 ```bash

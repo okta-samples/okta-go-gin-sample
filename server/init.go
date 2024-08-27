@@ -20,7 +20,7 @@ func Init() {
 		RedirectURL:  "http://localhost:8080/authorization-code/callback",
 		ClientID:     os.Getenv("OKTA_OAUTH2_CLIENT_ID"),
 		ClientSecret: os.Getenv("OKTA_OAUTH2_CLIENT_SECRET"),
-		Scopes:       []string{"openid", "profile", "email"},
+		Scopes:       []string{"openid", "profile", "email", "offline_access"},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:   os.Getenv("OKTA_OAUTH2_ISSUER") + "/v1/authorize",
 			TokenURL:  os.Getenv("OKTA_OAUTH2_ISSUER") + "/v1/token",
