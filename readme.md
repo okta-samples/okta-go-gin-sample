@@ -6,7 +6,7 @@ This example shows you how to use the [Okta JWT verifier library][] to login a u
 
 Before running this sample, you will need the following:
 
-- [Go 1.13 +](https://go.dev/dl/)
+- [Go 1.23 +](https://go.dev/dl/)
 - [The Okta CLI Tool](https://github.com/okta/okta-cli/#installation)
 - An Okta Developer Account, create one using `okta register`, or configure an existing one with `okta login`
 
