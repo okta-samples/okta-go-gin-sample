@@ -7,28 +7,49 @@ This example shows you how to use the [Okta JWT verifier library][] to login a u
 Before running this sample, you will need the following:
 
 - [Go 1.23 +](https://go.dev/dl/)
-- [The Okta CLI Tool](https://github.com/okta/okta-cli/#installation)
-- An Okta Developer Account, create one using `okta register`, or configure an existing one with `okta login`
+* An Okta Integrator Free Plan account. To get one, sign up for an [Integrator account](https://developer.okta.com/login). Once you have an account, sign in to your [Integrator account](https://developer.okta.com/login). Next, in the Admin Console:
+
+1. Go to **Applications > Applications**
+2. Click **Create App Integration**
+3. Select **OIDC - OpenID Connect** as the sign-in method
+4. Select **Web Application** as the application type, then click **Next**
+5. Enter an app integration name, e.g. `My Golang Gin App`
+6. Configure the redirect URIs:
+- Accept the default redirect URI values:
+- **Sign-in redirect URIs:** `http://localhost:8080/authorization-code/callback`
+- **Sign-out redirect URIs:** `http://localhost:8080`
+7. In the **Controlled access** section, select the appropriate access level
+8. Click **Save**
+
+Creating an OIDC Web App manually in the Admin Console configures your Okta Org with the application settings. You may also need to configure trusted origins for `http://localhost:8080` in **Security > API > Trusted Origins**.
 
 ## Get the Code
-
-Grab and configure this project using `okta start go-gin`
-
-You can also clone this project from GitHub and run `okta start` in it.
 
 ```bash
 git clone https://github.com/okta-samples/okta-go-gin-sample.git
 cd okta-go-gin-sample
-okta start
 ```
 
-Follow the instructions printed to the console.
+Update your config file at `.okta.env` with the values from your application's configuration:
+
+```text
+OKTA_OAUTH2_ISSUER="https://dev-133337.okta.com/oauth2/default"
+OKTA_OAUTH2_CLIENT_ID="0oab8eb55Kb9jdMIr5d6"
+OKTA_OAUTH2_CLIENT_SECRET="myClientSecret"
+```
 
 > **Note**: Don't EVER commit `.okta.env` into source control. Add it to the `.gitignore` file.
 
+### Where are my new app's credentials?
+
+After creating the app, you can find the configuration details on the app’s **General** tab:
+- **Client ID:** Found in the **Client Credentials** section
+- **Client Secret:** Click **Show** in the **Client Credentials** section to reveal
+- **Issuer:** Found in the **Issuer URI** field for the authorization server that appears by selecting **Security > API** from the navigation pane.
+
 ## Enable Refresh Token
 
-Sign into your [Okta Developer Edition account](https://developer.okta.com/login/) to add a required setting to your Go Okta app to avoid third-party cookies. Navigate to **Applications** > **Applications** and select "okta-go-gin-sample" application to edit. Find the **General Settings** and press **Edit**. Enable **Refresh Token** in the **Grant type** section. **Save** your changes.
+Manually enable Refresh Token on your Okta application to avoid third-party cookies. Sign in to your Okta Developer Edition account. Press the **Admin Console** button to navigate to the Okta Admin Console. In the sidenav, navigate to **Applications** > **Applications** and find the Okta application for this project named `okta-go-api-sample`. Edit the application's **General Setting** to enable the **Refresh Token** checkbox. **Save** your changes.
 
 ## Run the Example
 
